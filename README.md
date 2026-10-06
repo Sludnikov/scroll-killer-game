@@ -12,9 +12,20 @@
 
 GitHub Actions и Pages публикуют отчёт не мгновенно. После завершения команды дождитесь окончания workflow `Receive iPhone report`, затем нажмите «Проверить полученный отчёт» в игре. При ошибке workflow откройте его журнал на вкладке Actions. GitHub Pages не принимает запросы как сервер: приём обеспечивает GitHub API и Actions.
 
-## Друзья
+## Друзья: собственная GitHub-копия
 
-Друзья могут играть по общей ссылке, их прогресс хранится отдельно на их телефонах. Для автоматического учёта Экранного времени через GitHub каждому нужен собственный репозиторий, Pages, Actions и личный токен. Общий токен владельца нельзя помещать в публичную команду: любой смог бы отправлять запросы от его имени. Готовая автоматическая установка для друзей пока не опубликована; прежняя `ScrollKillerFriends` с адресом Sites удалена.
+Друзья могут играть по общей ссылке с локальным прогрессом. Для автоматического учёта iPhone через GitHub им нужна своя копия проекта. Это отделяет их отчёты и не раскрывает токен владельца.
+
+1. Войдите в свой GitHub и сделайте **Fork** репозитория `Sludnikov/scroll-killer-game` в свой аккаунт. Оставьте имя `scroll-killer-game` и ветку `main`.
+2. В своём Fork откройте **Settings → Pages → Build and deployment → Source: GitHub Actions**. Если GitHub предлагает включить Actions в Fork, включите.
+3. Откройте свою страницу Pages: `https://USERNAME.github.io/scroll-killer-game/`. Если хотите играть с иконки, сначала добавьте страницу на экран Домой и откройте именно иконку. В этой версии игры откройте «Настройки → Я новый игрок — настроить свой iPhone» и скопируйте личный код. Safari и иконка могут хранить разные локальные коды.
+4. В настройках своего Fork откройте **Settings → Secrets and variables → Actions → New repository secret**. Имя: `OWNER_GAME_KEY`. Значение: личный код из игры. Секрет не публикуйте.
+5. Создайте [fine-grained GitHub token](https://github.com/settings/personal-access-tokens/new?name=ScrollKiller-iPhone&expires_in=366&actions=write): **Only select repositories** → свой Fork; **Actions: Read and write**. Скопируйте токен, никому его не присылайте.
+6. Установите [ScrollKillerGitHubFriends](https://sludnikov.github.io/scroll-killer-game/assets/ScrollKillerGitHubFriends.shortcut). При установке укажите адрес Fork `USERNAME/scroll-killer-game` и свой токен.
+7. Один раз запустите команду. На вкладке **Actions** своего Fork дождитесь зелёного запуска **Receive iPhone report**. Обновите игру на своей странице Pages. Первый отчёт задаёт исходную точку; прежние минуты не списываются.
+8. В «Командах» создайте автоматизацию **Приложение → Закрыто** для Instagram, TikTok, YouTube и VK, действие **Запустить ScrollKillerGitHubFriends**.
+
+Для каждого друга нужна своя страница Pages. Общий токен в публичной команде не используется.
 
 ## Резервная копия
 

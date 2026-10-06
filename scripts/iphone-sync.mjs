@@ -21,8 +21,10 @@ const encrypt=value=>{
   const data=Buffer.concat([cipher.update(JSON.stringify(value)),cipher.final(),cipher.getAuthTag()]);
   return {version:1,iv:iv.toString('base64'),data:data.toString('base64')};
 };
-const current=decrypt(JSON.parse(await readFile(file,'utf8')));
-if(!current.game?.state||!current.sync)throw Error('Owner feed is incomplete');
+let current;
+try{current=decrypt(JSON.parse(await readFile(file,'utf8')))}
+catch(error){if(error.code!=='ENOENT')throw error;current={game:null,sync:{source:'local',totalSeconds:0}}}
+if(!current.sync)throw Error('Feed is incomplete');
 const totals=parseActivityLines(lines);
 const now=Date.now();
 const day=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Moscow',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
