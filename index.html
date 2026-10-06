@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#11162b">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" href="assets/logo-no-scroll.png">
+  <link rel="apple-touch-icon" href="assets/logo-no-scroll.png">
+  <link rel="stylesheet" href="styles.css">
+  <title>Убийца Скроллинга</title>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand"><img class="brand-logo" src="assets/logo-no-scroll.png" alt="NO СКРОЛЛ! — волшебник останавливает рукой"><span>Убийца<br><b>Скроллинга</b></span></div>
+      <button class="icon-button" data-view="settings" aria-label="Настройки">⚙</button>
+    </header>
+
+    <main>
+      <section id="home" class="view active" aria-label="Главный экран">
+        <div class="status-row"><span id="sync-status" class="status-pill">● Не синхронизировано</span><span id="candy-top" class="candy-pill">🍬 0</span></div>
+        <div class="hero-card">
+          <div class="scene-top"><span id="scene-name">Гостиная Гриффиндора</span><span class="scene-stars">✦ ✧ ✦</span></div>
+          <div class="scene" id="scene"><div id="scene-backdrop" class="scene-backdrop"></div><div id="hero-shadow" class="hero-shadow"></div><img id="hero-art" class="hero-art" src="assets/hero-lowpoly.png" alt="Юный волшебник в школьной мантии"><canvas id="scene-canvas" aria-hidden="true"></canvas><button id="hero-hit" aria-label="Нажать на героя"></button><div id="speech" class="speech hidden"></div></div>
+          <div class="hero-bottom"><span id="hero-state">Сила духа на высоте</span><span>ХОГВАРТС · НОЧЬ</span></div>
+        </div>
+        <div class="vitals panel">
+          <div class="vitals-head"><div><span class="eyebrow">СОСТОЯНИЕ ГЕРОЯ</span><h1 id="hp-label">100% HP</h1></div><span id="hp-word" class="health-word">Здоров</span></div>
+          <div class="hp-track"><div id="hp-bar"></div></div>
+          <div id="horcruxes" class="horcruxes" aria-label="Четыре крестража"></div>
+          <div class="threshold" hidden><span>До следующего урона</span><strong id="minutes-left">10 мин</strong></div>
+          <div class="minute-track" hidden><div id="minute-bar"></div></div>
+          <p class="muted tiny">В версии GitHub Pages время в других приложениях не считывается автоматически.</p>
+        </div>
+        <button id="sync-button" class="primary wide" hidden>Обновить с iPhone</button>
+        <div class="tile-grid">
+          <button class="tile" data-view="timer"><span class="tile-icon">◷</span><span>Таймеры<small>Чтение и оживление</small></span><b>›</b></button>
+          <button class="tile" data-view="activities"><span class="tile-icon">✦</span><span>Занятия<small>Заработать леденцы</small></span><b>›</b></button>
+          <button class="tile" data-view="collection"><span class="tile-icon">◇</span><span>Коллекция<small>Сцены и образы</small></span><b>›</b></button>
+          <button class="tile" data-view="settings"><span class="tile-icon">⚙</span><span>Настройки<small>Звук и данные</small></span><b>›</b></button>
+        </div>
+      </section>
+
+      <section id="defeat" class="view" aria-label="Поражение"><div class="defeat-crest">✧</div><p class="eyebrow">ТЬМА ВЗЯЛА ВЕРХ</p><h1>Герой пал</h1><p>Четыре крестража разрушены. Десять минут мини-тренировки вернут силы.</p><button id="defeat-sync" class="secondary wide" hidden>Обновить с iPhone</button><button id="revive-entry" class="primary wide">Начать оживление</button><p class="muted tiny">Покупки и другие занятия откроются после оживления.</p></section>
+
+      <section id="timer" class="view" aria-label="Таймеры"><div class="section-head"><button class="back" data-view="home">‹</button><div><span class="eyebrow">ВОССТАНОВЛЕНИЕ</span><h1>Таймеры</h1></div></div><div id="timer-intro" class="info-card"></div><div class="timer-face"><div class="timer-ring"><span id="timer-time">10:00</span><small id="timer-subtitle">до награды</small></div></div><div id="timer-controls"></div><p class="muted centered">Таймер считает время и при блокировке экрана. Магический сигнал прозвучит, когда игра открыта и включены звуки; после блокировки — при возвращении в игру.</p></section>
+
+      <section id="activities" class="view" aria-label="Занятия"><div class="section-head"><button class="back" data-view="home">‹</button><div><span class="eyebrow">РЕАЛЬНАЯ ЖИЗНЬ</span><h1>Занятия</h1></div></div><div class="info-card">Отмечайте выполненные занятия. Лимиты обновляются в полночь по местному времени iPhone.</div><div id="activity-list" class="list"></div></section>
+
+      <section id="collection" class="view" aria-label="Коллекция"><div class="section-head"><button class="back" data-view="home">‹</button><div><span class="eyebrow">ЛЕДЕНЦЫ · <span id="candy-collection">0</span></span><h1>Коллекция</h1></div></div><div class="segmented"><button data-category="scenes" class="selected">Сцены</button><button data-category="items">Предметы</button></div><div id="collection-list" class="collection-list"></div></section>
+
+      <section id="settings" class="view" aria-label="Настройки"><div class="section-head"><button class="back" data-view="home">‹</button><div><span class="eyebrow">УПРАВЛЕНИЕ</span><h1>Настройки</h1></div></div><div class="setting-row"><span>Музыка и звуки<small>Один переключатель для всей игры</small></span><button id="sound-toggle" class="switch" role="switch" aria-checked="false"><span></span></button></div><div class="panel settings-panel"><h2>Прогресс на устройстве</h2><p id="sync-detail" class="muted"></p><button id="settings-run-shortcut" class="secondary wide" hidden>Обновить данные с iPhone</button><button id="settings-sync" class="ghost wide" hidden>Проверить полученный отчёт</button><p class="muted tiny">Safari и установленная иконка могут хранить данные отдельно. Если переходите между ними, используйте «Скачать копию» и «Восстановить из файла».</p></div><div class="panel settings-panel"><h2>Резервная копия</h2><p class="muted">Скачайте файл прогресса. Храните его отдельно: удаление данных Safari удалит и локальный прогресс.</p><button id="export-button" class="secondary wide">Скачать копию</button><label class="file-button">Восстановить из файла<input id="import-file" type="file" accept="application/json,.json"></label></div><div class="panel settings-panel"><h2>Установка</h2><p class="muted">Safari → «Поделиться» → «На экран Домой». Игра откроется как веб-приложение. Для работы без интернета сначала откройте её один раз онлайн.</p></div></section>
+    </main>
+    <nav class="bottom-nav"><button data-view="home" class="selected"><span>⌂</span>Герой</button><button data-view="timer"><span>◷</span>Таймер</button><button data-view="activities"><span>✦</span>Занятия</button><button data-view="collection"><span>◇</span>Коллекция</button></nav>
+  </div>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
