@@ -27,3 +27,5 @@
 .scene-thumbnail{width:58px;height:58px;flex:none;object-fit:cover;object-position:center 55%;border-radius:11px;border:1px solid #b69c75;box-shadow:0 4px 9px #090b1d88}
 .shop-icon{background:radial-gradient(circle at 45% 30%,#635049,#312d40 70%);border:1px solid #8d7158;box-shadow:inset 0 1px 8px #d2a66b33,0 4px 9px #090b1d88;overflow:hidden}
 .shop-icon img{display:block;width:100%;height:100%;object-fit:contain;image-rendering:auto}
+
+.friend-setup{margin:16px 0;padding:16px;border:1px solid #555779;border-radius:18px;background:#1b2037}.friend-setup h3{margin:0 0 8px}.friend-setup code{display:block;margin:10px 0;padding:10px;overflow-wrap:anywhere;border-radius:10px;background:#0e1327;color:#f5db9a;font-size:12px}.friend-setup .file-button{display:block;margin:10px 0;text-align:center}

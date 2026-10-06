@@ -3,12 +3,16 @@ import {drawAccessories,itemIconData} from './accessories.js';
 const KEY='scroll-killer-pages-state-v1';
 const BRIDGE='https://scroll-killer-sync-bridge.radiance5100.chatgpt.site';
 const OWNER_TOKEN_KEY='scroll-killer-owner-token-v1';
-const hasCloud=()=>!!localStorage.getItem(OWNER_TOKEN_KEY);
-const cloudHeaders=()=>({'authorization':`Bearer ${localStorage.getItem(OWNER_TOKEN_KEY)}`});
-const SHORTCUT_NAME='ScrollKiller';
+const PLAYER_TOKEN_KEY='scroll-killer-player-token-v1';
+if(!localStorage.getItem(OWNER_TOKEN_KEY)&&!localStorage.getItem(PLAYER_TOKEN_KEY)){const bytes=crypto.getRandomValues(new Uint8Array(32));localStorage.setItem(PLAYER_TOKEN_KEY,Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join(''))}
+const isOwner=()=>!!localStorage.getItem(OWNER_TOKEN_KEY);
+const currentToken=()=>localStorage.getItem(OWNER_TOKEN_KEY)||localStorage.getItem(PLAYER_TOKEN_KEY);
+const hasCloud=()=>!!currentToken();
+const cloudHeaders=()=>({'authorization':`Bearer ${currentToken()}`});
+const SHORTCUT_NAME=()=>isOwner()?'ScrollKiller':'ScrollKillerFriends';
 const $=s=>document.querySelector(s);
 let state;try{state=restore(JSON.parse(localStorage.getItem(KEY)))}catch{state=initialState()}
-if(!hasCloud())state.sync={...state.sync,source:'local',revision:0,error:null};
+if(!isOwner()&&state.sync.source===null)state.sync={...state.sync,source:'local',revision:0,error:null};
 let view='home',category='scenes',toastTimeout,speechTimeout,audio;
 let cloudRevision=null,cloudReady=false,cloudQueue=Promise.resolve(),localGeneration=0,ready;
 const saveLocal=()=>{localStorage.setItem(KEY,JSON.stringify(state));render()};
@@ -82,8 +86,9 @@ function formatTime(sec){sec=Math.max(0,sec);return `${String(Math.floor(sec/60)
 function render(){resetDaily(state);if(state.hp===0&&!['defeat','timer'].includes(view))view='defeat';if(state.hp>0&&view==='defeat')view='home';document.body.classList.toggle('defeated',state.hp===0);document.querySelectorAll('.view').forEach(x=>x.classList.toggle('active',x.id===view));document.querySelectorAll('[data-view]').forEach(x=>x.classList.toggle('selected',x.dataset.view===view));
   $('#hp-label').textContent=`${state.hp}% HP`;$('#hp-bar').style.width=`${state.hp}%`;$('#hp-word').textContent=state.hp===100?'Здоров':state.hp===0?'Поражение':state.hp<=25?'Критично':'Ослаблен';$('#horcruxes').innerHTML=Array.from({length:4},(_,i)=>`<span class="horcrux ${i>=state.hp/25?'broken':''}" aria-label="${i<state.hp/25?'целый':'разрушенный'} крестраж">${i<state.hp/25?'✧':'×'}</span>`).join('');const remainder=state.totalSeconds%600;$('#minutes-left').textContent=`${Math.ceil((600-remainder)/60)} мин`;$('#minute-bar').style.width=`${remainder/600*100}%`;$('#hero-state').textContent=['Сила духа на высоте','Заклятие оставило след','Нужен отдых','Сил почти не осталось','Герой пал'][4-state.hp/25];$('#scene-name').textContent=SCENES.find(x=>x[0]===state.scene)?.[1]||SCENES[0][1];$('#candy-top').textContent=`🍬 ${state.candy}`;$('#candy-collection').textContent=state.candy;
   const synced=state.sync.source==='iphone';const stale=!fresh(state);$('#sync-status').textContent=state.sync.error?'● Ошибка синхронизации':!synced?'● Подключите iPhone':stale?'● Нужен свежий отчёт':'● Синхронизировано';$('#sync-status').className=`status-pill ${state.sync.error?'bad':stale||!synced?'':'good'}`;$('#sync-detail').textContent=`${state.sync.error||'Минуты приходят с iPhone после выхода из выбранных приложений.'} Последний отчёт iPhone: ${synced&&state.sync.generatedAt?new Date(state.sync.generatedAt).toLocaleString('ru-RU'):'никогда'}. ${stale&&synced?'Для обновления запустите ScrollKiller и вернитесь в игру.':''}`;
-  if(!hasCloud()){$('#sync-status').textContent='● Прогресс на устройстве';$('#sync-status').className='status-pill good';$('#sync-detail').textContent='Прогресс хранится на этом устройстве. Чтобы перенести его, скачайте резервную копию.'}
-  for(const id of ['sync-button','defeat-sync','settings-run-shortcut','settings-sync'])document.getElementById(id).hidden=!hasCloud();
+  if(!isOwner()&&state.sync.source!=='iphone'){$('#sync-status').textContent='● iPhone не подключён';$('#sync-status').className='status-pill';$('#sync-detail').textContent='Ваш прогресс хранится отдельно. Для автоматического учёта установите личную команду ниже; первый отчёт создаст исходную точку.'}
+  $('#friend-setup').hidden=isOwner();
+  if(!isOwner())$('#friend-code').textContent=currentToken();
   $('#sound-toggle').classList.toggle('on',state.sound);$('#sound-toggle').setAttribute('aria-checked',String(state.sound));renderTimer();renderActivities();renderCollection();drawScene();}
 function renderTimer(){
   const info=$('#timer-intro'),controls=$('#timer-controls'),timer=state.timer;
@@ -135,8 +140,8 @@ function checkTimerCompletion(){
 }
 let musicStep=0;const melody=[392,493.88,587.33,493.88,349.23,440,523.25,440];function startMusic(){if(!state.sound)return;tone(melody[musicStep++%melody.length],.022)}setInterval(()=>{if(document.visibilityState==='visible')startMusic()},950);
 let syncBusy=false;
-function runShortcut(){if(!hasCloud()){toast('Для синхронизации нужен личный файл подключения');return}window.location.href=`shortcuts://run-shortcut?name=${encodeURIComponent(SHORTCUT_NAME)}`}
-async function pullSync(manual=false){if(!hasCloud())return;
+function runShortcut(){if(!hasCloud()){$('#import-file').click();return}window.location.href=`shortcuts://run-shortcut?name=${encodeURIComponent(SHORTCUT_NAME())}`}
+async function pullSync(manual=false){if(!hasCloud()){if(manual)$('#import-file').click();return;}
   if(syncBusy)return;
   syncBusy=true;
   try{
@@ -177,12 +182,13 @@ document.querySelectorAll('[data-category]').forEach(b=>b.addEventListener('clic
 $('#hero-hit').onclick=()=>{const lines=state.hp===0?['Мне нужен новый шанс…']:['Ещё одна страница вместо ленты?','Магия начинается с выбора.','Давай проживём этот вечер по-настоящему.','Я всё ещё здесь.'];$('#speech').textContent=lines[Math.floor(Math.random()*lines.length)];$('#speech').classList.remove('hidden');clearTimeout(speechTimeout);speechTimeout=setTimeout(()=>$('#speech').classList.add('hidden'),2700);tone(560)};
 $('#sync-button').onclick=runShortcut;$('#defeat-sync').onclick=runShortcut;$('#settings-sync').onclick=()=>pullSync(true);$('#settings-run-shortcut').onclick=runShortcut;$('#revive-entry').onclick=()=>navigate('timer');
 $('#sound-toggle').onclick=()=>action(()=>{state.sound=!state.sound;startMusic()});
-$('#export-button').onclick=()=>{const blob=new Blob([JSON.stringify({format:'scroll-killer-backup',exportedAt:new Date().toISOString(),state,syncToken:localStorage.getItem(OWNER_TOKEN_KEY)||undefined},null,2)],{type:'application/json'}),link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download=`scroll-killer-${new Date().toISOString().replace(/[:.]/g,'-')}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(link.href),1000)};
-$('#import-file').onchange=async e=>{const file=e.target.files?.[0];if(!file)return;try{const backup=JSON.parse(await file.text());if(backup.format!=='scroll-killer-backup')throw Error('Это не резервная копия игры');await ready;await readCloud();state=restore(backup.state);state.callbackSafe=false;if(backup.syncToken){localStorage.setItem(OWNER_TOKEN_KEY,backup.syncToken);cloudReady=false;cloudRevision=null;saveLocal();await readCloud(false)}else if(!hasCloud())state.sync={...state.sync,source:'local',revision:0,error:null};await save();pullSync();toast('Копия восстановлена')}catch(error){toast(error.message)}e.target.value=''};
+$('#copy-friend-code').onclick=async()=>{try{await navigator.clipboard.writeText(currentToken());toast('Личный код скопирован')}catch{toast('Скопируйте код из поля выше')}};
+$('#export-button').onclick=()=>{const blob=new Blob([JSON.stringify({format:'scroll-killer-backup',exportedAt:new Date().toISOString(),state,syncToken:currentToken(),syncKind:isOwner()?'owner':'player'},null,2)],{type:'application/json'}),link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download=`scroll-killer-${new Date().toISOString().replace(/[:.]/g,'-')}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(link.href),1000)};
+$('#import-file').onchange=async e=>{const file=e.target.files?.[0];if(!file)return;try{const backup=JSON.parse(await file.text());if(backup.format!=='scroll-killer-backup')throw Error('Это не резервная копия игры');await ready;await readCloud();state=restore(backup.state);state.callbackSafe=false;if(backup.syncToken){if(backup.syncKind==='player'){localStorage.removeItem(OWNER_TOKEN_KEY);localStorage.setItem(PLAYER_TOKEN_KEY,backup.syncToken)}else localStorage.setItem(OWNER_TOKEN_KEY,backup.syncToken);cloudReady=false;cloudRevision=null;saveLocal();await readCloud(false)}else if(!isOwner())state.sync={...state.sync,source:'local',revision:0,error:null};await save();pullSync();toast(backup.syncToken?'Копия восстановлена':'Прогресс восстановлен. Для учёта Экранного времени настройте команду iPhone.')}catch(error){toast(error.message)}e.target.value=''};
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){pullSync();checkTimerCompletion();render()}});setInterval(()=>{checkTimerCompletion();if(view==='timer')renderTimer();if(view==='home'||view==='defeat')drawScene()},1000);setInterval(()=>{if(document.visibilityState==='visible')pullSync()},60000);
 if('serviceWorker'in navigator&&location.protocol==='https:')navigator.serviceWorker.register('./sw.js').then(registration=>{
   registration.update().catch(()=>{});
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')registration.update().catch(()=>{})});
   setInterval(()=>registration.update().catch(()=>{}),15*60*1000);
 }).catch(()=>{});
-render();ready=readCloud(false).catch(error=>{toast(error.message)});ready.then(()=>{pullSync();checkTimerCompletion()});
+render();ready=readCloud(!isOwner()).catch(error=>{toast(error.message)});ready.then(()=>{pullSync();checkTimerCompletion()});
