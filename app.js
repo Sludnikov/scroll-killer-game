@@ -184,8 +184,49 @@ $('#sync-button').onclick=runShortcut;$('#defeat-sync').onclick=runShortcut;$('#
 $('#sound-toggle').onclick=()=>action(()=>{state.sound=!state.sound;startMusic()});
 $('#copy-friend-code').onclick=async()=>{try{await navigator.clipboard.writeText(currentToken());toast('Личный код скопирован')}catch{toast('Скопируйте код из поля выше')}};
 $('#export-button').onclick=()=>{const blob=new Blob([JSON.stringify({format:'scroll-killer-backup',exportedAt:new Date().toISOString(),state,syncToken:currentToken(),syncKind:isOwner()?'owner':'player'},null,2)],{type:'application/json'}),link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download=`scroll-killer-${new Date().toISOString().replace(/[:.]/g,'-')}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(link.href),1000)};
+async function connectOwner(key){
+  key=key.trim();
+  if(!/^[a-f0-9]{64}$/i.test(key))throw Error('Код должен состоять из 64 символов. Скопируйте его целиком из connect-code.txt');
+  await ready;
+  await cloudQueue.catch(()=>{});
+  let response;
+  try{response=await fetch(BRIDGE+'/api/game-state',{cache:'no-store',headers:{authorization:'Bearer '+key},credentials:'omit'})}
+  catch{throw Error('Нет связи с сервером. Проверьте интернет и попробуйте ещё раз')}
+  if(response.status===404||response.status===401)throw Error('Этот код не нашёл сохранение. Возьмите код из личного connect-code.txt в приватном GitHub');
+  if(!response.ok)throw Error('Сервер временно недоступен. Попробуйте позже');
+  const data=await response.json();
+  if(!data.state||data.state.sync?.source!=='iphone')throw Error('Этот код не относится к существующей ScrollKiller');
+  localStorage.setItem(OWNER_TOKEN_KEY,key);
+  cloudReady=true;
+  adoptCloud(data);
+  render();
+  await pullSync();
+  return data;
+}
+$('#owner-connect').onclick=async()=>{
+  const button=$('#owner-connect');button.disabled=true;
+  try{await connectOwner($('#owner-code').value);$('#owner-code').value='';toast('ScrollKiller подключена. Прогресс загружен')}
+  catch(error){toast(error.message)}
+  finally{button.disabled=false}
+};
 $('#owner-import').onclick=()=>$('#import-file').click();
-$('#import-file').onchange=async e=>{const file=e.target.files?.[0];if(!file)return;try{const backup=JSON.parse(await file.text());if(backup.format!=='scroll-killer-backup')throw Error('Это не резервная копия игры');await ready;await readCloud();state=restore(backup.state);state.callbackSafe=false;if(backup.syncToken){if(backup.syncKind==='player'){localStorage.removeItem(OWNER_TOKEN_KEY);localStorage.setItem(PLAYER_TOKEN_KEY,backup.syncToken)}else localStorage.setItem(OWNER_TOKEN_KEY,backup.syncToken);cloudReady=false;cloudRevision=null;saveLocal();await readCloud(false)}else if(!isOwner())state.sync={...state.sync,source:'local',revision:0,error:null};await save();pullSync();toast(backup.syncToken?'Копия восстановлена':'Прогресс восстановлен. Для учёта Экранного времени настройте команду iPhone.')}catch(error){toast(error.message)}e.target.value=''};
+$('#import-file').onchange=async e=>{const file=e.target.files?.[0];if(!file)return;try{let fileContent;try{fileContent=await file.text()}catch{throw Error('Файл не открылся. Подключите игру по коду из приватного GitHub')}const backup=JSON.parse(fileContent);if(backup.format!=='scroll-killer-backup')throw Error('Это не резервная копия игры');await ready;await readCloud();if(backup.syncToken&&backup.syncKind!=='player'){
+    await connectOwner(backup.syncToken);
+    toast('ScrollKiller подключена. Прогресс загружен');
+  }else{
+    if(backup.syncToken){
+      if(!/^[a-f0-9]{64}$/i.test(backup.syncToken))throw Error('В файле неверный код подключения');
+      localStorage.removeItem(OWNER_TOKEN_KEY);
+      localStorage.setItem(PLAYER_TOKEN_KEY,backup.syncToken);
+      cloudReady=false;cloudRevision=null;
+    }
+    state=restore(backup.state);state.callbackSafe=false;
+    if(!backup.syncToken&&!isOwner())state.sync={...state.sync,source:'local',revision:0,error:null};
+    saveLocal();
+    if(backup.syncToken)await readCloud(true);else await save();
+    pullSync();
+    toast(backup.syncToken?'Копия восстановлена':'Прогресс восстановлен. Для учёта Экранного времени настройте команду iPhone.');
+  }}catch(error){toast(error.message)}e.target.value=''};
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){pullSync();checkTimerCompletion();render()}});setInterval(()=>{checkTimerCompletion();if(view==='timer')renderTimer();if(view==='home'||view==='defeat')drawScene()},1000);setInterval(()=>{if(document.visibilityState==='visible')pullSync()},60000);
 if('serviceWorker'in navigator&&location.protocol==='https:')navigator.serviceWorker.register('./sw.js').then(registration=>{
   registration.update().catch(()=>{});
