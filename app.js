@@ -8,7 +8,7 @@ if(!localStorage.getItem(OWNER_TOKEN_KEY)&&!localStorage.getItem(PLAYER_TOKEN_KE
 const isOwner=()=>!!localStorage.getItem(OWNER_TOKEN_KEY);
 const currentToken=()=>localStorage.getItem(OWNER_TOKEN_KEY)||localStorage.getItem(PLAYER_TOKEN_KEY);
 const hasCloud=()=>!!currentToken();
-const cloudHeaders=()=>({'authorization':`Bearer ${currentToken()}`});
+const bridgeRequest=(path,payload,token=currentToken())=>fetch(BRIDGE+'/api/browser',{method:'POST',headers:{'content-type':'text/plain'},body:JSON.stringify({token,path,...(payload===undefined?{}:{payload})}),cache:'no-store',credentials:'omit'});
 const SHORTCUT_NAME=()=>isOwner()?'ScrollKiller':'ScrollKillerFriends';
 const $=s=>document.querySelector(s);
 let state;try{state=restore(JSON.parse(localStorage.getItem(KEY)))}catch{state=initialState()}
@@ -18,7 +18,7 @@ let cloudRevision=null,cloudReady=false,cloudQueue=Promise.resolve(),localGenera
 const saveLocal=()=>{localStorage.setItem(KEY,JSON.stringify(state));render()};
 const toast=message=>{const el=$('#toast');el.textContent=message;el.classList.add('show');clearTimeout(toastTimeout);toastTimeout=setTimeout(()=>el.classList.remove('show'),3500)};
 async function cloudRequest(payload){
-  const response=await fetch(`${BRIDGE}/api/game-state`,{method:'POST',headers:{'content-type':'application/json',...cloudHeaders()},body:JSON.stringify(payload),cache:'no-store',credentials:'same-origin'});
+  const response=await bridgeRequest('/api/game-state',payload);
   const data=await response.json();
   if(!response.ok&&response.status!==409)throw Error(data.error||'Не удалось сохранить прогресс');
   return {response,data};
@@ -31,7 +31,7 @@ function adoptCloud(data){
 async function readCloud(migrate=false){
   if(!hasCloud())return;
   await cloudQueue.catch(()=>{});
-  const response=await fetch(`${BRIDGE}/api/game-state`,{cache:'no-store',headers:cloudHeaders(),credentials:'omit'});
+  const response=await bridgeRequest('/api/game-state');
   if(response.status===404){
     if(!migrate)return;
     const {data}=await cloudRequest({migrate:true,state});
@@ -147,7 +147,7 @@ async function pullSync(manual=false){if(!hasCloud()){if(manual)$('#import-file'
   try{
     await ready;
     await readCloud();
-    const response=await fetch(`${BRIDGE}/api/sync`,{cache:'no-store',headers:cloudHeaders(),credentials:'omit'});
+    const response=await bridgeRequest('/api/sync');
     if(!response.ok)throw Error(response.status===404?'iPhone ещё не передал данные':`Ошибка сервера: ${response.status}`);
     const input=await response.json();
     if(input.source!=='iphone'){
@@ -190,7 +190,7 @@ async function connectOwner(key){
   await ready;
   await cloudQueue.catch(()=>{});
   let response;
-  try{response=await fetch(BRIDGE+'/api/game-state',{cache:'no-store',headers:{authorization:'Bearer '+key},credentials:'omit'})}
+  try{response=await bridgeRequest('/api/game-state',undefined,key)}
   catch{throw Error('Нет связи с сервером. Проверьте интернет и попробуйте ещё раз')}
   if(response.status===404||response.status===401)throw Error('Этот код не нашёл сохранение. Возьмите код из личного connect-code.txt в приватном GitHub');
   if(!response.ok)throw Error('Сервер временно недоступен. Попробуйте позже');
