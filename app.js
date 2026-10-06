@@ -1,4 +1,4 @@
-import {SCENES,ITEMS,ACTIVITIES,TARGET_SECONDS,initialState,restore,applySync,startTimer,finishTimer,resetDaily,claimActivity,buyOrEquip,fresh} from './game.js';
+import {SCENES,ITEMS,ACTIVITIES,TARGET_SECONDS,initialState,restore,applySync,startTimer,finishTimer,resetDaily,claimActivity,buyOrEquip} from './game.js';
 import {drawAccessories,itemIconData} from './accessories.js';
 const KEY='scroll-killer-pages-state-v1';
 const OWNER_TOKEN_KEY='scroll-killer-owner-token-v1';
@@ -70,7 +70,7 @@ function drawScene(){
 function formatTime(sec){sec=Math.max(0,sec);return `${String(Math.floor(sec/60)).padStart(2,'0')}:${String(sec%60).padStart(2,'0')}`}
 function render(){resetDaily(state);if(state.hp===0&&!['defeat','timer'].includes(view))view='defeat';if(state.hp>0&&view==='defeat')view='home';document.body.classList.toggle('defeated',state.hp===0);document.querySelectorAll('.view').forEach(x=>x.classList.toggle('active',x.id===view));document.querySelectorAll('[data-view]').forEach(x=>x.classList.toggle('selected',x.dataset.view===view));
   $('#hp-label').textContent=`${state.hp}% HP`;$('#hp-bar').style.width=`${state.hp}%`;$('#hp-word').textContent=state.hp===100?'Здоров':state.hp===0?'Поражение':state.hp<=25?'Критично':'Ослаблен';$('#horcruxes').innerHTML=Array.from({length:4},(_,i)=>`<span class="horcrux ${i>=state.hp/25?'broken':''}" aria-label="${i<state.hp/25?'целый':'разрушенный'} крестраж">${i<state.hp/25?'✧':'×'}</span>`).join('');const remainder=state.totalSeconds%600;$('#minutes-left').textContent=`${Math.ceil((600-remainder)/60)} мин`;$('#minute-bar').style.width=`${remainder/600*100}%`;$('#hero-state').textContent=['Сила духа на высоте','Заклятие оставило след','Нужен отдых','Сил почти не осталось','Герой пал'][4-state.hp/25];$('#scene-name').textContent=SCENES.find(x=>x[0]===state.scene)?.[1]||SCENES[0][1];$('#candy-top').textContent=`🍬 ${state.candy}`;$('#candy-collection').textContent=state.candy;
-  const synced=state.sync.source==='iphone';const stale=!fresh(state);$('#sync-status').textContent=state.sync.error?'● Ошибка синхронизации':!synced?'● Подключите iPhone':stale?'● Нужен свежий отчёт':'● Синхронизировано';$('#sync-status').className=`status-pill ${state.sync.error?'bad':stale||!synced?'':'good'}`;$('#sync-detail').textContent=`${state.sync.error||'Минуты приходят с iPhone после выхода из выбранных приложений.'} Последний отчёт iPhone: ${synced&&state.sync.generatedAt?new Date(state.sync.generatedAt).toLocaleString('ru-RU'):'никогда'}. ${stale&&synced?'Для обновления запустите ScrollKiller и вернитесь в игру.':''}`;
+  const synced=state.sync.source==='iphone';$('#sync-status').textContent=state.sync.error?'● Ошибка синхронизации':!synced?'● Подключите iPhone':'● iPhone подключён';$('#sync-status').className=`status-pill ${state.sync.error?'bad':synced?'good':''}`;$('#sync-detail').textContent=`${state.sync.error||'Минуты приходят с iPhone после выхода из выбранных приложений.'} Последний отчёт iPhone: ${synced&&state.sync.generatedAt?new Date(state.sync.generatedAt).toLocaleString('ru-RU'):'никогда'}.`;
   if(!isOwner()&&state.sync.source!=='iphone'){$('#sync-status').textContent='● iPhone не подключён';$('#sync-status').className='status-pill';$('#sync-detail').textContent='Ваш прогресс хранится отдельно. Для автоматического учёта установите личную команду ниже; первый отчёт создаст исходную точку.'}
   $('#friend-setup').hidden=isOwner();
   if(!isOwner())$('#friend-code').textContent=currentToken();
@@ -145,7 +145,7 @@ async function pullSync(manual=false){if(!hasCloud()){if(manual)$('#import-file'
         state.sync.error=null;
         await save();
       }else render();
-      if(manual)toast(fresh(state)?'Данные уже актуальны':'Нового отчёта пока нет. GitHub может ещё публиковать его; проверьте через минуту.');
+      if(manual)toast('Новых минут нет. Игра проверит отчёт снова автоматически.');
       return;
     }
     if(sameSource&&input.revision<state.sync.revision)return;
