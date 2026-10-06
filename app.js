@@ -1,14 +1,12 @@
 import {SCENES,ITEMS,ACTIVITIES,TARGET_SECONDS,initialState,restore,applySync,startTimer,finishTimer,resetDaily,claimActivity,buyOrEquip,fresh} from './game.js';
 import {drawAccessories,itemIconData} from './accessories.js';
 const KEY='scroll-killer-pages-state-v1';
-const BRIDGE='https://scroll-killer-sync-bridge.radiance5100.chatgpt.site';
 const OWNER_TOKEN_KEY='scroll-killer-owner-token-v1';
 const PLAYER_TOKEN_KEY='scroll-killer-player-token-v1';
 if(!localStorage.getItem(OWNER_TOKEN_KEY)&&!localStorage.getItem(PLAYER_TOKEN_KEY)){const bytes=crypto.getRandomValues(new Uint8Array(32));localStorage.setItem(PLAYER_TOKEN_KEY,Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join(''))}
 const isOwner=()=>!!localStorage.getItem(OWNER_TOKEN_KEY);
 const currentToken=()=>localStorage.getItem(OWNER_TOKEN_KEY)||localStorage.getItem(PLAYER_TOKEN_KEY);
 const hasCloud=()=>!!currentToken();
-const bridgeRequest=(path,payload,token=currentToken())=>fetch(BRIDGE+'/api/browser',{method:'POST',headers:{'content-type':'text/plain'},body:JSON.stringify({token,path,...(payload===undefined?{}:{payload})}),cache:'no-store',credentials:'omit'});
 const SHORTCUT_NAME=()=>isOwner()?'ScrollKiller':'ScrollKillerFriends';
 const $=s=>document.querySelector(s);
 let state;try{state=restore(JSON.parse(localStorage.getItem(KEY)))}catch{state=initialState()}
@@ -17,47 +15,34 @@ let view='home',category='scenes',toastTimeout,speechTimeout,audio;
 let cloudRevision=null,cloudReady=false,cloudQueue=Promise.resolve(),localGeneration=0,ready;
 const saveLocal=()=>{localStorage.setItem(KEY,JSON.stringify(state));render()};
 const toast=message=>{const el=$('#toast');el.textContent=message;el.classList.add('show');clearTimeout(toastTimeout);toastTimeout=setTimeout(()=>el.classList.remove('show'),3500)};
-async function cloudRequest(payload){
-  const response=await bridgeRequest('/api/game-state',payload);
-  const data=await response.json();
-  if(!response.ok&&response.status!==409)throw Error(data.error||'Не удалось сохранить прогресс');
-  return {response,data};
+const FEED_INIT='scroll-killer-owner-feed-initialized-v1';
+const bytesFromBase64=value=>Uint8Array.from(atob(value),character=>character.charCodeAt(0));
+async function feedFor(token){
+  const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(token));
+  const id=Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,'0')).join('');
+  let response;
+  try{response=await fetch('./feeds/'+id+'.json',{cache:'no-store'})}
+  catch{throw Error('Не удалось загрузить отчёт с GitHub. Проверьте соединение')}
+  if(response.status===404)return null;
+  if(!response.ok)throw Error('GitHub пока не отдал отчёт. Повторите позже');
+  const encrypted=await response.json();
+  try{
+    const key=await crypto.subtle.importKey('raw',digest,'AES-GCM',false,['decrypt']);
+    const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:bytesFromBase64(encrypted.iv)},key,bytesFromBase64(encrypted.data));
+    return JSON.parse(new TextDecoder().decode(plain));
+  }catch{throw Error('Не удалось прочитать отчёт. Проверьте код подключения')}
 }
 function adoptCloud(data){
   cloudRevision=data.revision;
   state=restore(data.state);
   saveLocal();
 }
-async function readCloud(migrate=false){
-  if(!hasCloud())return;
-  await cloudQueue.catch(()=>{});
-  const response=await bridgeRequest('/api/game-state');
-  if(response.status===404){
-    if(!migrate)return;
-    const {data}=await cloudRequest({migrate:true,state});
-    adoptCloud(data);cloudReady=true;return;
-  }
-  if(!response.ok)throw Error(`Не удалось загрузить прогресс: ${response.status}`);
-  let data=await response.json();
-  if(migrate&&state.totalSeconds>data.state.totalSeconds){
-    data=(await cloudRequest({migrate:true,state})).data;
-  }
-  if(!cloudReady||data.revision!==cloudRevision)adoptCloud(data);
-  cloudReady=true;
+async function readCloud(){
+  if(!isOwner()||localStorage.getItem(FEED_INIT)===currentToken())return;
+  const feed=await feedFor(currentToken());
+  if(feed?.game){adoptCloud(feed.game);localStorage.setItem(FEED_INIT,currentToken())}
 }
-function save(){
-  saveLocal();
-  if(!hasCloud())return Promise.resolve();
-  const generation=++localGeneration;
-  if(!cloudReady)return Promise.resolve();
-  const snapshot=structuredClone(state);
-  cloudQueue=cloudQueue.catch(()=>{}).then(async()=>{
-    const {response,data}=await cloudRequest({revision:cloudRevision,state:snapshot});
-    cloudRevision=data.revision;
-    if(response.status===409&&generation===localGeneration){adoptCloud(data);toast('Прогресс обновлён из другой версии игры')}
-  });
-  return cloudQueue;
-}
+function save(){saveLocal();return Promise.resolve()}
 const action=async fn=>{try{await ready;await readCloud();fn();await save()}catch(e){toast(e.message)}};
 const sceneBackgrounds={common:'common-room.png',hall:'great-hall.png',library:'library.png',corridor:'corridor.png',potions:'potions.png',yard:'yard.png',greenhouse:'greenhouse.png',tower:'tower.png',quidditch:'quidditch.png',hut:'hut.png'};
 function drawScene(){
@@ -147,9 +132,8 @@ async function pullSync(manual=false){if(!hasCloud()){if(manual)$('#import-file'
   try{
     await ready;
     await readCloud();
-    const response=await bridgeRequest('/api/sync');
-    if(!response.ok)throw Error(response.status===404?'iPhone ещё не передал данные':`Ошибка сервера: ${response.status}`);
-    const input=await response.json();
+    const feed=await feedFor(currentToken());
+    const input=feed?.sync||{source:'local'};
     if(input.source!=='iphone'){
       if(state.sync.error){state.sync.error=null;save()}
       if(manual)toast('iPhone ещё не передал данные. Запустите команду в приложении «Команды».');
@@ -186,22 +170,15 @@ $('#copy-friend-code').onclick=async()=>{try{await navigator.clipboard.writeText
 $('#export-button').onclick=()=>{const blob=new Blob([JSON.stringify({format:'scroll-killer-backup',exportedAt:new Date().toISOString(),state,syncToken:currentToken(),syncKind:isOwner()?'owner':'player'},null,2)],{type:'application/json'}),link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download=`scroll-killer-${new Date().toISOString().replace(/[:.]/g,'-')}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(link.href),1000)};
 async function connectOwner(key){
   key=key.trim();
-  if(!/^[a-f0-9]{64}$/i.test(key))throw Error('Код должен состоять из 64 символов. Скопируйте его целиком из connect-code.txt');
-  await ready;
-  await cloudQueue.catch(()=>{});
-  let response;
-  try{response=await bridgeRequest('/api/game-state',undefined,key)}
-  catch{throw Error('Нет связи с сервером. Проверьте интернет и попробуйте ещё раз')}
-  if(response.status===404||response.status===401)throw Error('Этот код не нашёл сохранение. Возьмите код из личного connect-code.txt в приватном GitHub');
-  if(!response.ok)throw Error('Сервер временно недоступен. Попробуйте позже');
-  const data=await response.json();
-  if(!data.state||data.state.sync?.source!=='iphone')throw Error('Этот код не относится к существующей ScrollKiller');
+  if(!/^[a-f0-9]{64}$/i.test(key))throw Error('Скопируйте код целиком из connect-code.txt');
+  const feed=await feedFor(key);
+  if(!feed?.game)throw Error('Этот код не нашёл сохранение на GitHub. Повторите через несколько минут');
+  if(feed.game.state?.sync?.source!=='iphone')throw Error('Этот код не относится к вашей прежней ScrollKiller');
   localStorage.setItem(OWNER_TOKEN_KEY,key);
-  cloudReady=true;
-  adoptCloud(data);
-  render();
+  adoptCloud(feed.game);
+  localStorage.setItem(FEED_INIT,key);
   await pullSync();
-  return data;
+  return feed.game;
 }
 $('#owner-connect').onclick=async()=>{
   const button=$('#owner-connect');button.disabled=true;
