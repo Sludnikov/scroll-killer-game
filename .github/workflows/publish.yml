@@ -1,10 +1,8 @@
-name: Publish game and iPhone reports
+name: Publish game
 
 on:
   push:
     branches: [main]
-  schedule:
-    - cron: '*/10 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -30,10 +28,7 @@ jobs:
           mkdir -p site
           cp index.html styles.css app.js game.js accessories.js shortcut-log.js sw.js manifest.webmanifest icon.svg .nojekyll site/
           cp -R assets site/assets
-      - name: Encrypt current iPhone reports
-        env:
-          OWNER_GAME_KEY: ${{ secrets.OWNER_GAME_KEY }}
-        run: node scripts/build-feed.mjs
+          cp -R feeds site/feeds
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site

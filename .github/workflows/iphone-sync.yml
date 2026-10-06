@@ -1,0 +1,69 @@
+name: Receive iPhone report
+
+on:
+  workflow_dispatch:
+    inputs:
+      lines:
+        description: Screen Time rows sent by the private iPhone Shortcut
+        required: true
+        type: string
+      dry_run:
+        description: Validate dispatch without changing the owner's report
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  receive-and-publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Validate test dispatch
+        if: ${{ inputs.dry_run }}
+        env:
+          IPHONE_LINES: ${{ inputs.lines }}
+        run: node --input-type=module -e "import {parseActivityLines} from './scripts/iphone-activity.mjs'; parseActivityLines(process.env.IPHONE_LINES); console.log('iPhone report format valid')"
+      - name: Validate and encrypt iPhone report
+        if: ${{ !inputs.dry_run }}
+        env:
+          OWNER_GAME_KEY: ${{ secrets.OWNER_GAME_KEY }}
+          IPHONE_LINES: ${{ inputs.lines }}
+        run: node scripts/iphone-sync.mjs
+      - name: Save encrypted report
+        if: ${{ !inputs.dry_run }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add feeds
+          git diff --cached --quiet || git commit -m "Update encrypted iPhone report"
+          git push
+      - uses: actions/configure-pages@v5
+        if: ${{ !inputs.dry_run }}
+      - name: Prepare game files
+        if: ${{ !inputs.dry_run }}
+        run: |
+          mkdir -p site
+          cp index.html styles.css app.js game.js accessories.js shortcut-log.js sw.js manifest.webmanifest icon.svg .nojekyll site/
+          cp -R assets site/assets
+          cp -R feeds site/feeds
+      - uses: actions/upload-pages-artifact@v3
+        if: ${{ !inputs.dry_run }}
+        with:
+          path: site
+      - id: deployment
+        if: ${{ !inputs.dry_run }}
+        uses: actions/deploy-pages@v4

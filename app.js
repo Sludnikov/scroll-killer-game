@@ -7,7 +7,7 @@ if(!localStorage.getItem(OWNER_TOKEN_KEY)&&!localStorage.getItem(PLAYER_TOKEN_KE
 const isOwner=()=>!!localStorage.getItem(OWNER_TOKEN_KEY);
 const currentToken=()=>localStorage.getItem(OWNER_TOKEN_KEY)||localStorage.getItem(PLAYER_TOKEN_KEY);
 const hasCloud=()=>!!currentToken();
-const SHORTCUT_NAME=()=>isOwner()?'ScrollKiller':'ScrollKillerFriends';
+const SHORTCUT_NAME=()=>isOwner()?'ScrollKillerGitHub':'ScrollKillerGitHub';
 const $=s=>document.querySelector(s);
 let state;try{state=restore(JSON.parse(localStorage.getItem(KEY)))}catch{state=initialState()}
 if(!isOwner()&&state.sync.source===null)state.sync={...state.sync,source:'local',revision:0,error:null};
@@ -125,7 +125,7 @@ function checkTimerCompletion(){
 }
 let musicStep=0;const melody=[392,493.88,587.33,493.88,349.23,440,523.25,440];function startMusic(){if(!state.sound)return;tone(melody[musicStep++%melody.length],.022)}setInterval(()=>{if(document.visibilityState==='visible')startMusic()},950);
 let syncBusy=false;
-function runShortcut(){if(!hasCloud()){$('#import-file').click();return}window.location.href=`shortcuts://run-shortcut?name=${encodeURIComponent(SHORTCUT_NAME())}`}
+function runShortcut(){if(!isOwner()){toast('Для учёта Экранного времени нужна личная копия проекта на GitHub');return}window.location.href=`shortcuts://run-shortcut?name=${encodeURIComponent(SHORTCUT_NAME())}`}
 async function pullSync(manual=false){if(!hasCloud()){if(manual)$('#import-file').click();return;}
   if(syncBusy)return;
   syncBusy=true;
@@ -145,7 +145,7 @@ async function pullSync(manual=false){if(!hasCloud()){if(manual)$('#import-file'
         state.sync.error=null;
         await save();
       }else render();
-      if(manual)toast(fresh(state)?'Данные уже актуальны':'Нового отчёта нет. Запустите ScrollKiller на iPhone.');
+      if(manual)toast(fresh(state)?'Данные уже актуальны':'Нового отчёта пока нет. GitHub может ещё публиковать его; проверьте через минуту.');
       return;
     }
     if(sameSource&&input.revision<state.sync.revision)return;
