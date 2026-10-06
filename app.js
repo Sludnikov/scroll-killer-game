@@ -1,17 +1,20 @@
 import {SCENES,ITEMS,ACTIVITIES,TARGET_SECONDS,initialState,restore,applySync,startTimer,finishTimer,resetDaily,claimActivity,buyOrEquip,fresh} from './game.js';
 import {drawAccessories,itemIconData} from './accessories.js';
 const KEY='scroll-killer-pages-state-v1';
-const PAGES_MODE=true;
+const BRIDGE='https://scroll-killer-sync-bridge.radiance5100.chatgpt.site';
+const OWNER_TOKEN_KEY='scroll-killer-owner-token-v1';
+const hasCloud=()=>!!localStorage.getItem(OWNER_TOKEN_KEY);
+const cloudHeaders=()=>({'authorization':`Bearer ${localStorage.getItem(OWNER_TOKEN_KEY)}`});
 const SHORTCUT_NAME='ScrollKiller';
 const $=s=>document.querySelector(s);
 let state;try{state=restore(JSON.parse(localStorage.getItem(KEY)))}catch{state=initialState()}
-state.sync={...state.sync,source:'local',revision:0,error:null};
+if(!hasCloud())state.sync={...state.sync,source:'local',revision:0,error:null};
 let view='home',category='scenes',toastTimeout,speechTimeout,audio;
 let cloudRevision=null,cloudReady=false,cloudQueue=Promise.resolve(),localGeneration=0,ready;
 const saveLocal=()=>{localStorage.setItem(KEY,JSON.stringify(state));render()};
 const toast=message=>{const el=$('#toast');el.textContent=message;el.classList.add('show');clearTimeout(toastTimeout);toastTimeout=setTimeout(()=>el.classList.remove('show'),3500)};
 async function cloudRequest(payload){
-  const response=await fetch('/api/game-state',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload),cache:'no-store',credentials:'same-origin'});
+  const response=await fetch(`${BRIDGE}/api/game-state`,{method:'POST',headers:{'content-type':'application/json',...cloudHeaders()},body:JSON.stringify(payload),cache:'no-store',credentials:'same-origin'});
   const data=await response.json();
   if(!response.ok&&response.status!==409)throw Error(data.error||'Не удалось сохранить прогресс');
   return {response,data};
@@ -22,9 +25,9 @@ function adoptCloud(data){
   saveLocal();
 }
 async function readCloud(migrate=false){
-  if(PAGES_MODE)return;
+  if(!hasCloud())return;
   await cloudQueue.catch(()=>{});
-  const response=await fetch('/api/game-state',{cache:'no-store',credentials:'same-origin'});
+  const response=await fetch(`${BRIDGE}/api/game-state`,{cache:'no-store',headers:cloudHeaders(),credentials:'omit'});
   if(response.status===404){
     if(!migrate)return;
     const {data}=await cloudRequest({migrate:true,state});
@@ -40,7 +43,7 @@ async function readCloud(migrate=false){
 }
 function save(){
   saveLocal();
-  if(PAGES_MODE)return Promise.resolve();
+  if(!hasCloud())return Promise.resolve();
   const generation=++localGeneration;
   if(!cloudReady)return Promise.resolve();
   const snapshot=structuredClone(state);
@@ -79,7 +82,8 @@ function formatTime(sec){sec=Math.max(0,sec);return `${String(Math.floor(sec/60)
 function render(){resetDaily(state);if(state.hp===0&&!['defeat','timer'].includes(view))view='defeat';if(state.hp>0&&view==='defeat')view='home';document.body.classList.toggle('defeated',state.hp===0);document.querySelectorAll('.view').forEach(x=>x.classList.toggle('active',x.id===view));document.querySelectorAll('[data-view]').forEach(x=>x.classList.toggle('selected',x.dataset.view===view));
   $('#hp-label').textContent=`${state.hp}% HP`;$('#hp-bar').style.width=`${state.hp}%`;$('#hp-word').textContent=state.hp===100?'Здоров':state.hp===0?'Поражение':state.hp<=25?'Критично':'Ослаблен';$('#horcruxes').innerHTML=Array.from({length:4},(_,i)=>`<span class="horcrux ${i>=state.hp/25?'broken':''}" aria-label="${i<state.hp/25?'целый':'разрушенный'} крестраж">${i<state.hp/25?'✧':'×'}</span>`).join('');const remainder=state.totalSeconds%600;$('#minutes-left').textContent=`${Math.ceil((600-remainder)/60)} мин`;$('#minute-bar').style.width=`${remainder/600*100}%`;$('#hero-state').textContent=['Сила духа на высоте','Заклятие оставило след','Нужен отдых','Сил почти не осталось','Герой пал'][4-state.hp/25];$('#scene-name').textContent=SCENES.find(x=>x[0]===state.scene)?.[1]||SCENES[0][1];$('#candy-top').textContent=`🍬 ${state.candy}`;$('#candy-collection').textContent=state.candy;
   const synced=state.sync.source==='iphone';const stale=!fresh(state);$('#sync-status').textContent=state.sync.error?'● Ошибка синхронизации':!synced?'● Подключите iPhone':stale?'● Нужен свежий отчёт':'● Синхронизировано';$('#sync-status').className=`status-pill ${state.sync.error?'bad':stale||!synced?'':'good'}`;$('#sync-detail').textContent=`${state.sync.error||'Минуты приходят с iPhone после выхода из выбранных приложений.'} Последний отчёт iPhone: ${synced&&state.sync.generatedAt?new Date(state.sync.generatedAt).toLocaleString('ru-RU'):'никогда'}. ${stale&&synced?'Для обновления запустите ScrollKiller и вернитесь в игру.':''}`;
-  $('#sync-status').textContent='● Прогресс на устройстве';$('#sync-status').className='status-pill good';$('#sync-detail').textContent='Прогресс хранится в этом браузере или веб-приложении. Для переноса на другое устройство скачайте резервную копию.';
+  if(!hasCloud()){$('#sync-status').textContent='● Прогресс на устройстве';$('#sync-status').className='status-pill good';$('#sync-detail').textContent='Прогресс хранится на этом устройстве. Чтобы перенести его, скачайте резервную копию.'}
+  for(const id of ['sync-button','defeat-sync','settings-run-shortcut','settings-sync'])document.getElementById(id).hidden=!hasCloud();
   $('#sound-toggle').classList.toggle('on',state.sound);$('#sound-toggle').setAttribute('aria-checked',String(state.sound));renderTimer();renderActivities();renderCollection();drawScene();}
 function renderTimer(){
   const info=$('#timer-intro'),controls=$('#timer-controls'),timer=state.timer;
@@ -131,14 +135,14 @@ function checkTimerCompletion(){
 }
 let musicStep=0;const melody=[392,493.88,587.33,493.88,349.23,440,523.25,440];function startMusic(){if(!state.sound)return;tone(melody[musicStep++%melody.length],.022)}setInterval(()=>{if(document.visibilityState==='visible')startMusic()},950);
 let syncBusy=false;
-function runShortcut(){if(PAGES_MODE){toast('Автоматический учёт Экранного времени на GitHub Pages недоступен');return}window.location.href=`shortcuts://run-shortcut?name=${encodeURIComponent(SHORTCUT_NAME)}`}
-async function pullSync(manual=false){if(PAGES_MODE)return;
+function runShortcut(){if(!hasCloud()){toast('Для синхронизации нужен личный файл подключения');return}window.location.href=`shortcuts://run-shortcut?name=${encodeURIComponent(SHORTCUT_NAME)}`}
+async function pullSync(manual=false){if(!hasCloud())return;
   if(syncBusy)return;
   syncBusy=true;
   try{
     await ready;
     await readCloud();
-    const response=await fetch('/api/sync',{cache:'no-store',credentials:'same-origin'});
+    const response=await fetch(`${BRIDGE}/api/sync`,{cache:'no-store',headers:cloudHeaders(),credentials:'omit'});
     if(!response.ok)throw Error(response.status===404?'iPhone ещё не передал данные':`Ошибка сервера: ${response.status}`);
     const input=await response.json();
     if(input.source!=='iphone'){
@@ -173,12 +177,12 @@ document.querySelectorAll('[data-category]').forEach(b=>b.addEventListener('clic
 $('#hero-hit').onclick=()=>{const lines=state.hp===0?['Мне нужен новый шанс…']:['Ещё одна страница вместо ленты?','Магия начинается с выбора.','Давай проживём этот вечер по-настоящему.','Я всё ещё здесь.'];$('#speech').textContent=lines[Math.floor(Math.random()*lines.length)];$('#speech').classList.remove('hidden');clearTimeout(speechTimeout);speechTimeout=setTimeout(()=>$('#speech').classList.add('hidden'),2700);tone(560)};
 $('#sync-button').onclick=runShortcut;$('#defeat-sync').onclick=runShortcut;$('#settings-sync').onclick=()=>pullSync(true);$('#settings-run-shortcut').onclick=runShortcut;$('#revive-entry').onclick=()=>navigate('timer');
 $('#sound-toggle').onclick=()=>action(()=>{state.sound=!state.sound;startMusic()});
-$('#export-button').onclick=()=>{const blob=new Blob([JSON.stringify({format:'scroll-killer-backup',exportedAt:new Date().toISOString(),state},null,2)],{type:'application/json'}),link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download=`scroll-killer-${new Date().toISOString().replace(/[:.]/g,'-')}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(link.href),1000)};
-$('#import-file').onchange=async e=>{const file=e.target.files?.[0];if(!file)return;try{const backup=JSON.parse(await file.text());if(backup.format!=='scroll-killer-backup')throw Error('Это не резервная копия игры');await ready;await readCloud();state=restore(backup.state);state.sync={...state.sync,source:'local',revision:0,error:null};state.callbackSafe=false;await save();toast('Копия восстановлена')}catch(error){toast(error.message)}e.target.value=''};
+$('#export-button').onclick=()=>{const blob=new Blob([JSON.stringify({format:'scroll-killer-backup',exportedAt:new Date().toISOString(),state,syncToken:localStorage.getItem(OWNER_TOKEN_KEY)||undefined},null,2)],{type:'application/json'}),link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download=`scroll-killer-${new Date().toISOString().replace(/[:.]/g,'-')}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(link.href),1000)};
+$('#import-file').onchange=async e=>{const file=e.target.files?.[0];if(!file)return;try{const backup=JSON.parse(await file.text());if(backup.format!=='scroll-killer-backup')throw Error('Это не резервная копия игры');await ready;await readCloud();state=restore(backup.state);state.callbackSafe=false;if(backup.syncToken){localStorage.setItem(OWNER_TOKEN_KEY,backup.syncToken);cloudReady=false;cloudRevision=null;saveLocal();await readCloud(false)}else if(!hasCloud())state.sync={...state.sync,source:'local',revision:0,error:null};await save();pullSync();toast('Копия восстановлена')}catch(error){toast(error.message)}e.target.value=''};
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){pullSync();checkTimerCompletion();render()}});setInterval(()=>{checkTimerCompletion();if(view==='timer')renderTimer();if(view==='home'||view==='defeat')drawScene()},1000);setInterval(()=>{if(document.visibilityState==='visible')pullSync()},60000);
 if('serviceWorker'in navigator&&location.protocol==='https:')navigator.serviceWorker.register('./sw.js').then(registration=>{
   registration.update().catch(()=>{});
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')registration.update().catch(()=>{})});
   setInterval(()=>registration.update().catch(()=>{}),15*60*1000);
 }).catch(()=>{});
-render();ready=Promise.resolve();ready.then(()=>{pullSync();checkTimerCompletion()});
+render();ready=readCloud(false).catch(error=>{toast(error.message)});ready.then(()=>{pullSync();checkTimerCompletion()});

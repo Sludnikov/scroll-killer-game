@@ -1,4 +1,4 @@
-const CACHE='scroll-killer-pages-v1';
+const CACHE='scroll-killer-pages-v2';
 const ASSETS=['./','./index.html','./styles.css','./app.js','./game.js','./accessories.js','./shortcut-log.js','./manifest.webmanifest','./assets/logo-no-scroll.png','./assets/hero-lowpoly.png','./assets/common-room.png','./assets/great-hall.png','./assets/library.png','./assets/corridor.png','./assets/potions.png','./assets/yard.png','./assets/greenhouse.png','./assets/tower.png','./assets/quidditch.png','./assets/hut.png'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',e=>e.waitUntil((async()=>{
