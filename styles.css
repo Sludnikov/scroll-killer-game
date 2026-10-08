@@ -20,6 +20,8 @@
 .scene[data-hp="50"] canvas{transform:rotate(-2deg)}
 .scene[data-hp="25"] canvas{transform:rotate(-5deg) translateY(12px)}
 .scene[data-hp="0"] canvas{transform:rotate(-9deg) translateY(27px);animation:none}
+.vitals .threshold{margin-top:12px}
+.vitals .threshold[hidden],.vitals .minute-track[hidden]{display:none}
 #hero-hit{z-index:5;left:18%;top:4%;width:64%;height:92%}
 .speech{z-index:6;top:18px}
 

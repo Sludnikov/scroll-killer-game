@@ -69,7 +69,11 @@ function drawScene(){
 }
 function formatTime(sec){sec=Math.max(0,sec);return `${String(Math.floor(sec/60)).padStart(2,'0')}:${String(sec%60).padStart(2,'0')}`}
 function render(){resetDaily(state);if(state.hp===0&&!['defeat','timer'].includes(view))view='defeat';if(state.hp>0&&view==='defeat')view='home';document.body.classList.toggle('defeated',state.hp===0);document.querySelectorAll('.view').forEach(x=>x.classList.toggle('active',x.id===view));document.querySelectorAll('[data-view]').forEach(x=>x.classList.toggle('selected',x.dataset.view===view));
-  $('#hp-label').textContent=`${state.hp}% HP`;$('#hp-bar').style.width=`${state.hp}%`;$('#hp-word').textContent=state.hp===100?'Здоров':state.hp===0?'Поражение':state.hp<=25?'Критично':'Ослаблен';$('#horcruxes').innerHTML=Array.from({length:4},(_,i)=>`<span class="horcrux ${i>=state.hp/25?'broken':''}" aria-label="${i<state.hp/25?'целый':'разрушенный'} крестраж">${i<state.hp/25?'✧':'×'}</span>`).join('');const remainder=state.totalSeconds%600;$('#minutes-left').textContent=`${Math.ceil((600-remainder)/60)} мин`;$('#minute-bar').style.width=`${remainder/600*100}%`;$('#hero-state').textContent=['Сила духа на высоте','Заклятие оставило след','Нужен отдых','Сил почти не осталось','Герой пал'][4-state.hp/25];$('#scene-name').textContent=SCENES.find(x=>x[0]===state.scene)?.[1]||SCENES[0][1];$('#candy-top').textContent=`🍬 ${state.candy}`;$('#candy-collection').textContent=state.candy;
+  $('#hp-label').textContent=`${state.hp}% HP`;$('#hp-bar').style.width=`${state.hp}%`;$('#hp-word').textContent=state.hp===100?'Здоров':state.hp===0?'Поражение':state.hp<=25?'Критично':'Ослаблен';$('#horcruxes').innerHTML=Array.from({length:4},(_,i)=>`<span class="horcrux ${i>=state.hp/25?'broken':''}" aria-label="${i<state.hp/25?'целый':'разрушенный'} крестраж">${i<state.hp/25?'✧':'×'}</span>`).join('');
+  const showThreshold=state.sync.source==='iphone'&&state.hp>0;
+  $('#home .threshold').hidden=!showThreshold;$('#home .minute-track').hidden=!showThreshold;
+  const remainder=state.totalSeconds%600;$('#minutes-left').textContent=`${Math.ceil((600-remainder)/60)} мин`;$('#minute-bar').style.width=`${remainder/600*100}%`;
+  $('#hero-state').textContent=['Сила духа на высоте','Заклятие оставило след','Нужен отдых','Сил почти не осталось','Герой пал'][4-state.hp/25];$('#scene-name').textContent=SCENES.find(x=>x[0]===state.scene)?.[1]||SCENES[0][1];$('#candy-top').textContent=`🍬 ${state.candy}`;$('#candy-collection').textContent=state.candy;
   const synced=state.sync.source==='iphone';$('#sync-status').textContent=state.sync.error?'● Ошибка синхронизации':!synced?'● Подключите iPhone':'● iPhone подключён';$('#sync-status').className=`status-pill ${state.sync.error?'bad':synced?'good':''}`;$('#sync-detail').textContent=`${state.sync.error||'Минуты приходят с iPhone после выхода из выбранных приложений.'} Последний отчёт iPhone: ${synced&&state.sync.generatedAt?new Date(state.sync.generatedAt).toLocaleString('ru-RU'):'никогда'}.`;
   if(!isOwner()&&state.sync.source!=='iphone'){$('#sync-status').textContent='● iPhone не подключён';$('#sync-status').className='status-pill';$('#sync-detail').textContent='Ваш прогресс хранится отдельно. Для автоматического учёта установите личную команду ниже; первый отчёт создаст исходную точку.'}
   $('#friend-setup').hidden=isOwner();
@@ -124,11 +128,13 @@ function checkTimerCompletion(){
   toast('Время вышло! Награда ждёт тебя.');
 }
 let musicStep=0;const melody=[392,493.88,587.33,493.88,349.23,440,523.25,440];function startMusic(){if(!state.sound)return;tone(melody[musicStep++%melody.length],.022)}setInterval(()=>{if(document.visibilityState==='visible')startMusic()},950);
-let syncBusy=false;
-function runShortcut(){window.location.href=`shortcuts://run-shortcut?name=${encodeURIComponent(SHORTCUT_NAME())}`}
+const SHORTCUT_PENDING_KEY='scroll-killer-shortcut-pending-v1';
+const shortcutAge=()=>{const started=Number(sessionStorage.getItem(SHORTCUT_PENDING_KEY)||0);return started?Date.now()-started:Infinity};
+let syncBusy=false,lastPullAt=0;
+function runShortcut(){sessionStorage.setItem(SHORTCUT_PENDING_KEY,String(Date.now()));window.location.href=`shortcuts://run-shortcut?name=${encodeURIComponent(SHORTCUT_NAME())}`}
 async function pullSync(manual=false){if(!hasCloud()){if(manual)$('#import-file').click();return;}
-  if(syncBusy)return;
-  syncBusy=true;
+  if(syncBusy){if(manual)toast('Проверка уже идёт. Подождите несколько секунд.');return;}
+  syncBusy=true;lastPullAt=Date.now();
   try{
     await ready;
     await readCloud();
@@ -136,7 +142,7 @@ async function pullSync(manual=false){if(!hasCloud()){if(manual)$('#import-file'
     const input=feed?.sync||{source:'local'};
     if(input.source!=='iphone'){
       if(state.sync.error){state.sync.error=null;save()}
-      if(manual)toast('iPhone ещё не передал данные. Запустите команду в приложении «Команды».');
+      if(manual)toast(shortcutAge()<300000?'Первый отчёт ещё публикуется на GitHub. Игра проверит его сама.':'iPhone ещё не передал данные. Запустите команду в приложении «Команды».');
       return;
     }
     const sameSource=state.sync.source==='iphone';
@@ -145,7 +151,7 @@ async function pullSync(manual=false){if(!hasCloud()){if(manual)$('#import-file'
         state.sync.error=null;
         await save();
       }else render();
-      if(manual)toast('Новых минут нет. Игра проверит отчёт снова автоматически.');
+      if(manual)toast(shortcutAge()<300000?'Отчёт ещё публикуется на GitHub. Игра проверит его сама.':shortcutAge()<1800000?'Новый отчёт не появился. Проверьте запуск в GitHub Actions.':'Последний отчёт уже учтён. Новых данных пока нет.');
       return;
     }
     if(sameSource&&input.revision<state.sync.revision)return;
@@ -154,7 +160,8 @@ async function pullSync(manual=false){if(!hasCloud()){if(manual)$('#import-file'
     const adjusted={...input,totalSeconds:input.totalSeconds+state[baseKey]};
     const result=applySync(state,adjusted);
     state=result.state;await save();
-    if(result.damage||result.interrupted||manual){tone(result.damage?220:630);toast(result.damage?`Урон: −${result.damage*25}% HP`:result.interrupted?'Таймер на паузе после открытия приложения':'Данные обновлены')}
+    const fromShortcut=shortcutAge()<1800000;sessionStorage.removeItem(SHORTCUT_PENDING_KEY);
+    if(result.damage||result.interrupted||manual||fromShortcut){tone(result.damage?220:630);toast(result.damage?`Урон: −${result.damage*25}% HP`:result.interrupted?'Таймер на паузе после открытия приложения':'Отчёт получен. HP не изменился.')}
   }catch(error){
     const message=error.message||'Не удалось получить данные iPhone';
     if(state.sync.error!==message){state.sync.error=message;await save()}
@@ -204,7 +211,7 @@ $('#import-file').onchange=async e=>{const file=e.target.files?.[0];if(!file)ret
     pullSync();
     toast(backup.syncToken?'Копия восстановлена':'Прогресс восстановлен. Для учёта Экранного времени настройте команду iPhone.');
   }}catch(error){toast(error.message)}e.target.value=''};
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){pullSync();checkTimerCompletion();render()}});setInterval(()=>{checkTimerCompletion();if(view==='timer')renderTimer();if(view==='home'||view==='defeat')drawScene()},1000);setInterval(()=>{if(document.visibilityState==='visible')pullSync()},60000);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){pullSync();checkTimerCompletion();render()}});setInterval(()=>{checkTimerCompletion();if(view==='timer')renderTimer();if(view==='home'||view==='defeat')drawScene()},1000);setInterval(()=>{if(document.visibilityState==='visible'&&(shortcutAge()<300000||Date.now()-lastPullAt>=60000))pullSync()},15000);
 if('serviceWorker'in navigator&&location.protocol==='https:')navigator.serviceWorker.register('./sw.js').then(registration=>{
   registration.update().catch(()=>{});
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')registration.update().catch(()=>{})});
