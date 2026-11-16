@@ -8,6 +8,7 @@ const isOwner=()=>!!localStorage.getItem(OWNER_TOKEN_KEY);
 const currentToken=()=>localStorage.getItem(OWNER_TOKEN_KEY)||localStorage.getItem(PLAYER_TOKEN_KEY);
 const hasCloud=()=>!!currentToken();
 const SHORTCUT_NAME=()=>isOwner()?'ScrollKillerGitHub':'ScrollKillerGitHubFriends';
+const REPORT_STALE_MS=24*60*60*1000;
 const $=s=>document.querySelector(s);
 let state;try{state=restore(JSON.parse(localStorage.getItem(KEY)))}catch{state=initialState()}
 if(!isOwner()&&state.sync.source===null)state.sync={...state.sync,source:'local',revision:0,error:null};
@@ -74,7 +75,11 @@ function render(){resetDaily(state);if(state.hp===0&&!['defeat','timer'].include
   $('#home .threshold').hidden=!showThreshold;$('#home .minute-track').hidden=!showThreshold;
   const remainder=state.totalSeconds%600;$('#minutes-left').textContent=`${Math.ceil((600-remainder)/60)} мин`;$('#minute-bar').style.width=`${remainder/600*100}%`;
   $('#hero-state').textContent=['Сила духа на высоте','Заклятие оставило след','Нужен отдых','Сил почти не осталось','Герой пал'][4-state.hp/25];$('#scene-name').textContent=SCENES.find(x=>x[0]===state.scene)?.[1]||SCENES[0][1];$('#candy-top').textContent=`🍬 ${state.candy}`;$('#candy-collection').textContent=state.candy;
-  const synced=state.sync.source==='iphone';$('#sync-status').textContent=state.sync.error?'● Ошибка синхронизации':!synced?'● Подключите iPhone':'● iPhone подключён';$('#sync-status').className=`status-pill ${state.sync.error?'bad':synced?'good':''}`;$('#sync-detail').textContent=`${state.sync.error||'Минуты приходят с iPhone после выхода из выбранных приложений.'} Последний отчёт iPhone: ${synced&&state.sync.generatedAt?new Date(state.sync.generatedAt).toLocaleString('ru-RU'):'никогда'}.`;
+  const synced=state.sync.source==='iphone',reportAt=synced&&state.sync.generatedAt?new Date(state.sync.generatedAt).toLocaleString('ru-RU'):'никогда';
+  const stale=synced&&Date.now()-state.sync.generatedAt>REPORT_STALE_MS;
+  $('#sync-status').textContent=state.sync.error?'● Ошибка синхронизации':!synced?'● Подключите iPhone':stale?'● Нет свежего отчёта':'● iPhone подключён';
+  $('#sync-status').className=`status-pill ${state.sync.error||stale?'bad':synced?'good':''}`;
+  $('#sync-detail').textContent=`${state.sync.error||(stale?'Новые отчёты с iPhone не приходят. Проверьте запуск команды в «Командах».':'Минуты приходят с iPhone после выхода из выбранных приложений.')} Последний отчёт iPhone: ${reportAt}.`;
   if(!isOwner()&&state.sync.source!=='iphone'){$('#sync-status').textContent='● iPhone не подключён';$('#sync-status').className='status-pill';$('#sync-detail').textContent='Ваш прогресс хранится отдельно. Для автоматического учёта установите личную команду ниже; первый отчёт создаст исходную точку.'}
   $('#friend-setup').hidden=isOwner();
   if(!isOwner())$('#friend-code').textContent=currentToken();
@@ -151,7 +156,7 @@ async function pullSync(manual=false){if(!hasCloud()){if(manual)$('#import-file'
         state.sync.error=null;
         await save();
       }else render();
-      if(manual)toast(shortcutAge()<300000?'Отчёт ещё публикуется на GitHub. Игра проверит его сама.':shortcutAge()<1800000?'Новый отчёт не появился. Проверьте запуск в GitHub Actions.':'Последний отчёт уже учтён. Новых данных пока нет.');
+      if(manual)toast(shortcutAge()<300000?'Отчёт ещё публикуется на GitHub. Игра проверит его сама.':shortcutAge()<1800000?'Новый отчёт не появился. Проверьте запуск в GitHub Actions.':Date.now()-state.sync.generatedAt>REPORT_STALE_MS?'Новых отчётов с iPhone нет. Проверьте ScrollKillerGitHub.':'Последний отчёт уже учтён. Новых данных пока нет.');
       return;
     }
     if(sameSource&&input.revision<state.sync.revision)return;
